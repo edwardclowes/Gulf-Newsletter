@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
- * Immigration & DHS Daily Briefing
- * Searches for ICE, third-country deportations, and DHS policy news
- * then emails a formatted briefing via Gmail (nodemailer).
+ * Gulf Business Daily Briefing
+ * Six-section morning newsletter covering Gulf business, geopolitics & markets.
  *
  * Usage:  node briefing.js
- * Cron:   0 7 * * * cd /path/to/project && node briefing.js
+ * Cron:   0 5 * * 1-5 cd /path/to/project && node briefing.js
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -24,31 +23,65 @@ for (const [k, v] of Object.entries({ RECIPIENT_EMAIL, GMAIL_USER, GMAIL_APP_PAS
   if (!v) { console.error(`Missing env var: ${k}`); process.exit(1); }
 }
 
+// ─── Approved sources ─────────────────────────────────────────────────────────
+const APPROVED_SOURCES = [
+  // Tier-1 global
+  "Reuters", "Bloomberg", "Financial Times", "Wall Street Journal", "WSJ",
+  "Associated Press", "AP", "BBC", "The Economist", "New York Times",
+  "Washington Post",
+  // Gulf-specialist
+  "The National", "Arab News", "Gulf News", "Khaleej Times",
+  "MEED", "Arabian Business", "Zawya", "Al Monitor", "Middle East Eye",
+  "Asharq Al-Awsat", "Al Arabiya", "Argaam",
+];
+
 // ─── Topics ───────────────────────────────────────────────────────────────────
 const TOPICS = [
   {
-    id: "ice",
-    label: "ICE Operations",
-    query: "US Immigration ICE operations arrests deportations raids 2026",
+    id: "saudi",
+    label: "Saudi Arabia & Vision 2030",
+    emoji: "🇸🇦",
+    query: "Saudi Arabia Vision 2030 economy business investment policy",
   },
   {
-    id: "third_country",
-    label: "Third-Country Deportations",
-    query: "US third country deportations El Salvador Mexico Rwanda agreement 2026",
+    id: "uae",
+    label: "UAE — Abu Dhabi & Dubai",
+    emoji: "🇦🇪",
+    query: "UAE Abu Dhabi Dubai economy business investment deal announcement",
   },
   {
-    id: "dhs",
-    label: "DHS Policy Changes",
-    query: "US Department of Homeland Security policy immigration rule change announcement 2026",
+    id: "oil",
+    label: "Oil & Energy Markets",
+    emoji: "🛢️",
+    query: "Gulf oil energy OPEC crude price production Saudi Aramco ADNOC",
+  },
+  {
+    id: "swf",
+    label: "Sovereign Wealth Funds",
+    emoji: "🏦",
+    query: "Gulf sovereign wealth fund PIF Mubadala ADIA QIA investment deal",
+  },
+  {
+    id: "geopolitics",
+    label: "Gulf Geopolitics & Diplomacy",
+    emoji: "🌐",
+    query: "Gulf geopolitics diplomacy Saudi UAE relations US China Iran regional",
+  },
+  {
+    id: "markets",
+    label: "Gulf Financial Markets & M&A",
+    emoji: "📈",
+    query: "Gulf financial markets M&A IPO deal Saudi UAE Tadawul DFM ADX",
   },
 ];
 
 // ─── Anthropic client ─────────────────────────────────────────────────────────
 const anthropic = new Anthropic({ apiKey: ANTHROPIC_KEY });
 
-/**
- * Strip <cite index="...">...</cite> tags that Claude's web search injects.
- */
+function todayString() {
+  return new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+}
+
 function stripCitations(str = "") {
   return String(str)
     .replace(/<cite[^>]*>/g, "")
@@ -57,34 +90,45 @@ function stripCitations(str = "") {
 }
 
 /**
- * Fetch news for a single topic using Claude + web_search tool.
- * Returns { summary, stories: [{ headline, source, url, detail, significance }] }
+ * Fetch and validate news for a single topic.
+ * Returns { summary, watch, stories: [{ headline, source, url, published_date, detail, significance }] }
  */
 async function fetchTopic(topic) {
   console.log(`  → Searching: ${topic.label}`);
+  const today = todayString();
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 1200,
-    system: `You are a concise, factual news briefing writer. Use web search to find the latest news (last 24-48 hours if possible) on the given topic. Return ONLY a valid JSON object with NO markdown fencing, NO preamble, NO citation tags:
+    max_tokens: 2000,
+    system: `You are a senior Gulf business journalist writing a morning briefing. Today's date is ${today}.
+
+Use web search to find the LATEST news (published within the last 48 hours) on the given topic. 
+
+STRICT RULES:
+- Only include stories published in the last 48 hours. If you cannot find genuinely recent stories, say so honestly rather than using older material.
+- Only cite stories from these approved sources: ${APPROVED_SOURCES.join(", ")}. Do not use blogs, press releases, or unknown outlets.
+- Do not include any <cite> tags or citation markup in your response.
+
+Return ONLY a valid JSON object with NO markdown fencing, NO preamble:
 {
-  "summary": "2-3 sentence overview of the current situation",
+  "summary": "2-3 sentence factual overview of the current situation as of ${today}",
+  "watch": "One forward-looking sentence: what to monitor in the next 24-48 hours",
   "stories": [
     {
       "headline": "Specific story headline",
-      "source": "Publication name",
-      "url": "https://full-url-to-the-article.com",
-      "detail": "1-2 sentence factual description",
-      "significance": "One sentence on why this matters"
+      "source": "Exact publication name",
+      "url": "https://full-url-to-article.com",
+      "published_date": "YYYY-MM-DD or approximate e.g. today/yesterday",
+      "detail": "1-2 sentence factual description of the story",
+      "significance": "One sentence on why this matters for Gulf business"
     }
   ]
 }
-Include 2-4 of the most significant stories. Be factual and neutral. Always include the full URL for each story.`,
+Include 2-4 of the most significant recent stories. Be factual and neutral.`,
     tools: [{ type: "web_search_20250305", name: "web_search" }],
-    messages: [{ role: "user", content: `Find the very latest news about: ${topic.query}` }],
+    messages: [{ role: "user", content: `Find the very latest news (last 48 hours, today is ${today}) about: ${topic.query}` }],
   });
 
-  // Extract the final text block (after tool use)
   const text = response.content
     .filter((b) => b.type === "text")
     .map((b) => b.text)
@@ -92,18 +136,19 @@ Include 2-4 of the most significant stories. Be factual and neutral. Always incl
 
   try {
     const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-    // Strip any citation markup that leaked into text fields
-    parsed.summary = stripCitations(parsed.summary);
+    parsed.summary = stripCitations(parsed.summary || "");
+    parsed.watch   = stripCitations(parsed.watch || "");
     parsed.stories = (parsed.stories || []).map((s) => ({
       ...s,
-      headline:    stripCitations(s.headline),
-      source:      stripCitations(s.source),
-      detail:      stripCitations(s.detail),
-      significance: stripCitations(s.significance),
+      headline:       stripCitations(s.headline),
+      source:         stripCitations(s.source),
+      detail:         stripCitations(s.detail),
+      significance:   stripCitations(s.significance),
+      published_date: stripCitations(s.published_date),
     }));
     return parsed;
   } catch {
-    return { summary: stripCitations(text.slice(0, 400)), stories: [] };
+    return { summary: stripCitations(text.slice(0, 400)), watch: "", stories: [] };
   }
 }
 
@@ -114,62 +159,95 @@ function formatDate() {
   });
 }
 
-// ─── Email builders ───────────────────────────────────────────────────────────
+// ─── Colour map per topic ─────────────────────────────────────────────────────
+const TOPIC_COLOURS = {
+  saudi:      "#006C35", // Saudi green
+  uae:        "#C8102E", // UAE red
+  oil:        "#5A3E1B", // oil brown
+  swf:        "#1B3A5C", // finance navy
+  geopolitics:"#4A235A", // deep purple
+  markets:    "#1A5C3A", // market green
+};
+
+// ─── HTML builder ─────────────────────────────────────────────────────────────
 function buildHtml(results) {
   const date = formatDate();
 
   const sections = results.map(({ topic, data }) => {
+    const colour = TOPIC_COLOURS[topic.id] || "#1a1a1a";
+
     const stories = (data.stories || []).map((s) => `
-      <div style="margin-bottom:18px;padding-bottom:18px;border-bottom:1px solid #ede8df;">
+      <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #ede8df;">
         ${s.url
-          ? `<a href="${esc(s.url)}" style="font-size:14px;font-weight:700;color:#1a1a1a;text-decoration:none;display:block;margin-bottom:3px;">${esc(s.headline)}</a>`
-          : `<div style="font-size:14px;font-weight:700;color:#1a1a1a;margin-bottom:3px;">${esc(s.headline)}</div>`}
-        <div style="font-size:10px;color:#999;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">
+          ? `<a href="${esc(s.url)}" style="font-size:14px;font-weight:700;color:#1a1a1a;text-decoration:none;display:block;margin-bottom:3px;line-height:1.4;">${esc(s.headline)}</a>`
+          : `<div style="font-size:14px;font-weight:700;color:#1a1a1a;margin-bottom:3px;line-height:1.4;">${esc(s.headline)}</div>`}
+        <div style="font-size:10px;color:#999;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
           ${s.url ? `<a href="${esc(s.url)}" style="color:#999;text-decoration:none;">${esc(s.source)}</a>` : esc(s.source)}
+          ${s.published_date ? ` &middot; ${esc(s.published_date)}` : ""}
         </div>
-        <div style="font-size:13px;color:#444;line-height:1.6;">${esc(s.detail)}</div>
-        ${s.significance ? `<div style="font-size:12px;color:#888;font-style:italic;margin-top:4px;">→ ${esc(s.significance)}</div>` : ""}
+        <div style="font-size:13px;color:#444;line-height:1.65;">${esc(s.detail)}</div>
+        ${s.significance ? `<div style="font-size:12px;color:#777;font-style:italic;margin-top:5px;line-height:1.5;">→ ${esc(s.significance)}</div>` : ""}
         ${s.url ? `<div style="margin-top:8px;"><a href="${esc(s.url)}" style="font-size:11px;color:#888;text-decoration:underline;">Read more →</a></div>` : ""}
       </div>`).join("");
 
+    const watchBox = data.watch ? `
+      <div style="background:#f9f6f0;border-left:3px solid ${colour};padding:10px 14px;margin-top:4px;margin-bottom:4px;font-size:12px;color:#555;line-height:1.5;">
+        <strong style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#aaa;display:block;margin-bottom:4px;">What to watch</strong>
+        ${esc(data.watch)}
+      </div>` : "";
+
     return `
-      <div style="padding:28px 40px;border-bottom:1px solid #e8e3d8;">
-        <div style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:#aaa;margin-bottom:10px;">${esc(topic.label)}</div>
-        ${data.summary ? `<div style="font-size:14px;line-height:1.7;color:#333;border-left:3px solid #1a1a1a;padding-left:14px;margin-bottom:20px;">${esc(data.summary)}</div>` : ""}
+      <div style="padding:28px 40px;border-bottom:2px solid #e8e3d8;">
+        <div style="display:flex;align-items:center;margin-bottom:12px;">
+          <span style="font-size:18px;margin-right:10px;">${topic.emoji}</span>
+          <span style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:${colour};font-weight:700;">${esc(topic.label)}</span>
+        </div>
+        ${data.summary ? `<div style="font-size:14px;line-height:1.75;color:#333;border-left:3px solid ${colour};padding-left:14px;margin-bottom:20px;">${esc(data.summary)}</div>` : ""}
         ${stories}
+        ${watchBox}
       </div>`;
   }).join("");
 
   return `<!DOCTYPE html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Immigration &amp; DHS Briefing — ${date}</title></head>
-<body style="margin:0;padding:0;background:#f4f0e8;font-family:Georgia,serif;">
-  <div style="max-width:620px;margin:24px auto;background:#fff;border:1px solid #ddd;">
-    <div style="background:#1a1a1a;color:#f4f0e8;padding:32px 40px;">
-      <div style="font-size:9px;letter-spacing:5px;text-transform:uppercase;opacity:.5;margin-bottom:8px;">Daily Intelligence</div>
-      <div style="font-size:26px;font-weight:700;margin-bottom:6px;">Immigration &amp; DHS Briefing</div>
-      <div style="font-size:12px;opacity:.45;">${date}</div>
+<title>Gulf Business Briefing — ${date}</title></head>
+<body style="margin:0;padding:0;background:#f0ece4;font-family:Georgia,serif;">
+  <div style="max-width:640px;margin:24px auto;background:#fff;border:1px solid #d8d3c8;">
+
+    <div style="background:#0a0a0a;color:#f0ece4;padding:36px 40px;">
+      <div style="font-size:9px;letter-spacing:6px;text-transform:uppercase;opacity:.4;margin-bottom:10px;">Daily Intelligence</div>
+      <div style="font-size:28px;font-weight:700;margin-bottom:6px;letter-spacing:-0.5px;">Gulf Business Briefing</div>
+      <div style="font-size:12px;opacity:.4;letter-spacing:1px;">${date}</div>
     </div>
+
+    <div style="padding:16px 40px;background:#f9f6f0;border-bottom:2px solid #e8e3d8;font-size:11px;color:#888;letter-spacing:1px;">
+      ${TOPICS.map(t => `<span style="margin-right:16px;">${t.emoji} ${t.label}</span>`).join("")}
+    </div>
+
     ${sections}
-    <div style="padding:20px 40px;text-align:center;font-size:10px;color:#bbb;background:#f9f6f0;">
-      Generated by your automated Immigration &amp; DHS Briefing · ${date}
+
+    <div style="padding:24px 40px;text-align:center;font-size:10px;color:#bbb;background:#f9f6f0;letter-spacing:1px;">
+      Gulf Business Briefing · ${date} · Sources verified against approved outlet list
     </div>
   </div>
 </body></html>`;
 }
 
+// ─── Plain text builder ───────────────────────────────────────────────────────
 function buildText(results) {
   const date = formatDate();
-  let out = `IMMIGRATION & DHS BRIEFING — ${date}\n${"=".repeat(52)}\n\n`;
+  let out = `GULF BUSINESS BRIEFING — ${date}\n${"=".repeat(52)}\n\n`;
   for (const { topic, data } of results) {
-    out += `${topic.label.toUpperCase()}\n${"-".repeat(topic.label.length)}\n`;
+    out += `${topic.emoji}  ${topic.label.toUpperCase()}\n${"-".repeat(topic.label.length + 4)}\n`;
     if (data.summary) out += `${data.summary}\n\n`;
     for (const s of data.stories || []) {
-      out += `• ${s.headline} (${s.source})\n  ${s.detail}\n`;
+      out += `• ${s.headline} (${s.source}${s.published_date ? ", " + s.published_date : ""})\n`;
+      out += `  ${s.detail}\n`;
       if (s.significance) out += `  → ${s.significance}\n`;
       if (s.url) out += `  ${s.url}\n`;
       out += "\n";
     }
+    if (data.watch) out += `WATCH: ${data.watch}\n`;
     out += "\n";
   }
   return out;
@@ -190,10 +268,11 @@ async function sendEmail(htmlBody, textBody) {
     auth: { user: GMAIL_USER, pass: GMAIL_APP_PASS },
   });
 
+  const subject = `Gulf Briefing — ${formatDate()}`;
   const info = await transporter.sendMail({
-    from: `"DHS Briefing Bot" <${GMAIL_USER}>`,
+    from: `"Gulf Briefing" <${GMAIL_USER}>`,
     to: RECIPIENT_EMAIL,
-    subject: `Immigration & DHS Briefing — ${formatDate()}`,
+    subject,
     text: textBody,
     html: htmlBody,
   });
@@ -203,7 +282,7 @@ async function sendEmail(htmlBody, textBody) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 async function main() {
-  console.log(`\nImmigration & DHS Briefing — ${formatDate()}`);
+  console.log(`\nGulf Business Briefing — ${formatDate()}`);
   console.log("Fetching news...\n");
 
   const results = [];
@@ -212,14 +291,13 @@ async function main() {
       const data = await fetchTopic(topic);
       results.push({ topic, data });
     } catch (err) {
-      console.error(`  ✗ Failed to fetch "${topic.label}":`, err.message);
-      results.push({ topic, data: { summary: "Could not retrieve stories for this topic.", stories: [] } });
+      console.error(`  ✗ Failed: "${topic.label}":`, err.message);
+      results.push({ topic, data: { summary: "Could not retrieve stories for this topic.", watch: "", stories: [] } });
     }
   }
 
   console.log("\nBuilding and sending email...");
   await sendEmail(buildHtml(results), buildText(results));
-
   console.log("\n✓ Done.\n");
 }
 
