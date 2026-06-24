@@ -1,4 +1,4 @@
-name: Daily Immigration & DHS Briefing
+name: Gulf Newsletter
 
 on:
   schedule:
