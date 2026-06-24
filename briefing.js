@@ -96,10 +96,10 @@ async function fetchTopic(topic) {
     max_tokens: 900,
     system: `You are a senior Gulf business journalist writing a tight morning briefing. Today's date is ${today}.
 
-Use web search to find the LATEST news (published within the last 48 hours) on the given topic.
+Use web search to find the LATEST news (published within the last 72 hours) on the given topic.
 
 STRICT RULES:
-- Only include stories published in the last 48 hours. If you cannot find genuinely recent stories, return fewer or none rather than using older material.
+- Only include stories published in the last 72 hours. If you cannot find genuinely recent stories, return fewer or none rather than using older material.
 - Only cite stories from these approved sources: ${APPROVED_SOURCES.join(", ")}. Do not use blogs, press releases, or unknown outlets.
 - Do not include any <cite> tags or citation markup.
 - Keep it punchy. One sentence per story, no more.
@@ -117,8 +117,8 @@ CRITICAL: Your entire response must be ONLY the raw JSON object. Do NOT write an
   "watch": "ONE forward-looking sentence: what to monitor on this topic in the next 24-48 hours"
 }
 Include the 3 most significant recent stories. Be factual and neutral.`,
-    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 2 }],
-    messages: [{ role: "user", content: `Find the very latest news (last 48 hours, today is ${today}) about: ${topic.query}` }],
+    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 4 }],
+    messages: [{ role: "user", content: `Find the very latest news (last 72 hours, today is ${today}) about: ${topic.query}` }],
   });
 
   const text = response.content
@@ -181,7 +181,7 @@ function buildHtml(results) {
           <span style="font-size:16px;margin-right:10px;">${topic.emoji}</span>
           <span style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:${colour};font-weight:700;">${esc(topic.label)}</span>
         </div>
-        ${stories || `<div style="font-size:12px;color:#aaa;font-style:italic;">No fresh stories in the last 48 hours.</div>`}
+        ${stories || `<div style="font-size:12px;color:#aaa;font-style:italic;">No fresh stories in the last 72 hours.</div>`}
         ${data.watch ? `<div style="background:#f9f6f0;border-left:3px solid ${colour};padding:9px 13px;margin-top:12px;font-size:12px;color:#555;line-height:1.5;"><strong style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#aaa;display:block;margin-bottom:3px;">What to watch</strong>${esc(data.watch)}</div>` : ""}
       </div>`;
   }).join("");
@@ -218,7 +218,7 @@ function buildText(results) {
   for (const { topic, data } of results) {
     out += `${topic.emoji}  ${topic.label.toUpperCase()}\n${"-".repeat(topic.label.length + 4)}\n`;
     const stories = data.stories || [];
-    if (!stories.length) out += `No fresh stories in the last 48 hours.\n`;
+    if (!stories.length) out += `No fresh stories in the last 72 hours.\n`;
     for (const s of stories) {
       out += `• ${s.headline} — ${s.source}\n  ${s.detail}\n`;
       if (s.url) out += `  ${s.url}\n`;
