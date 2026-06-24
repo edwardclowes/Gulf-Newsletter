@@ -50,12 +50,6 @@ const TOPICS = [
     query: "UAE Abu Dhabi Dubai economy business investment deal announcement",
   },
   {
-    id: "oil",
-    label: "Oil & Energy Markets",
-    emoji: "🛢️",
-    query: "Gulf oil energy OPEC crude price production Saudi Aramco ADNOC",
-  },
-  {
     id: "swf",
     label: "Sovereign Wealth Funds",
     emoji: "🏦",
@@ -99,33 +93,31 @@ async function fetchTopic(topic) {
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
-    max_tokens: 2000,
-    system: `You are a senior Gulf business journalist writing a morning briefing. Today's date is ${today}.
+    max_tokens: 900,
+    system: `You are a senior Gulf business journalist writing a tight morning briefing. Today's date is ${today}.
 
-Use web search to find the LATEST news (published within the last 48 hours) on the given topic. 
+Use web search to find the LATEST news (published within the last 48 hours) on the given topic.
 
 STRICT RULES:
-- Only include stories published in the last 48 hours. If you cannot find genuinely recent stories, say so honestly rather than using older material.
+- Only include stories published in the last 48 hours. If you cannot find genuinely recent stories, return fewer or none rather than using older material.
 - Only cite stories from these approved sources: ${APPROVED_SOURCES.join(", ")}. Do not use blogs, press releases, or unknown outlets.
-- Do not include any <cite> tags or citation markup in your response.
+- Do not include any <cite> tags or citation markup.
+- Keep it punchy. One sentence per story, no more.
 
-CRITICAL: Your entire response must be ONLY the raw JSON object. Do NOT write any preamble, explanation, or thinking-out-loud. Do NOT use code fences. Start your response with { and end with }. Nothing else. Use this exact structure:
+CRITICAL: Your entire response must be ONLY the raw JSON object. Do NOT write any preamble, explanation, or thinking-out-loud. Do NOT use code fences. Start with { and end with }. Use this exact structure:
 {
-  "summary": "2-3 sentence factual overview of the current situation as of ${today}",
-  "watch": "One forward-looking sentence: what to monitor in the next 24-48 hours",
   "stories": [
     {
       "headline": "Specific story headline",
       "source": "Exact publication name",
       "url": "https://full-url-to-article.com",
-      "published_date": "YYYY-MM-DD or approximate e.g. today/yesterday",
-      "detail": "1-2 sentence factual description of the story",
-      "significance": "One sentence on why this matters for Gulf business"
+      "detail": "ONE sentence summarising the story"
     }
-  ]
+  ],
+  "watch": "ONE forward-looking sentence: what to monitor on this topic in the next 24-48 hours"
 }
-Include 2-4 of the most significant recent stories. Be factual and neutral.`,
-    tools: [{ type: "web_search_20250305", name: "web_search" }],
+Include the 3 most significant recent stories. Be factual and neutral.`,
+    tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 2 }],
     messages: [{ role: "user", content: `Find the very latest news (last 48 hours, today is ${today}) about: ${topic.query}` }],
   });
 
@@ -138,19 +130,16 @@ Include 2-4 of the most significant recent stories. Be factual and neutral.`,
     // Pull out just the JSON object, ignoring any preamble or code fences
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text.replace(/```json|```/g, "").trim());
-    parsed.summary = stripCitations(parsed.summary || "");
-    parsed.watch   = stripCitations(parsed.watch || "");
+    parsed.watch = stripCitations(parsed.watch || "");
     parsed.stories = (parsed.stories || []).map((s) => ({
-      ...s,
-      headline:       stripCitations(s.headline),
-      source:         stripCitations(s.source),
-      detail:         stripCitations(s.detail),
-      significance:   stripCitations(s.significance),
-      published_date: stripCitations(s.published_date),
+      headline: stripCitations(s.headline),
+      source:   stripCitations(s.source),
+      url:      s.url,
+      detail:   stripCitations(s.detail),
     }));
     return parsed;
   } catch {
-    return { summary: stripCitations(text.slice(0, 400)), watch: "", stories: [] };
+    return { stories: [], watch: "" };
   }
 }
 
@@ -165,7 +154,6 @@ function formatDate() {
 const TOPIC_COLOURS = {
   saudi:      "#006C35", // Saudi green
   uae:        "#C8102E", // UAE red
-  oil:        "#5A3E1B", // oil brown
   swf:        "#1B3A5C", // finance navy
   geopolitics:"#4A235A", // deep purple
   markets:    "#1A5C3A", // market green
@@ -179,34 +167,22 @@ function buildHtml(results) {
     const colour = TOPIC_COLOURS[topic.id] || "#1a1a1a";
 
     const stories = (data.stories || []).map((s) => `
-      <div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid #ede8df;">
+      <div style="margin-bottom:16px;">
         ${s.url
-          ? `<a href="${esc(s.url)}" style="font-size:14px;font-weight:700;color:#1a1a1a;text-decoration:none;display:block;margin-bottom:3px;line-height:1.4;">${esc(s.headline)}</a>`
-          : `<div style="font-size:14px;font-weight:700;color:#1a1a1a;margin-bottom:3px;line-height:1.4;">${esc(s.headline)}</div>`}
-        <div style="font-size:10px;color:#999;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">
-          ${s.url ? `<a href="${esc(s.url)}" style="color:#999;text-decoration:none;">${esc(s.source)}</a>` : esc(s.source)}
-          ${s.published_date ? ` &middot; ${esc(s.published_date)}` : ""}
-        </div>
-        <div style="font-size:13px;color:#444;line-height:1.65;">${esc(s.detail)}</div>
-        ${s.significance ? `<div style="font-size:12px;color:#777;font-style:italic;margin-top:5px;line-height:1.5;">→ ${esc(s.significance)}</div>` : ""}
-        ${s.url ? `<div style="margin-top:8px;"><a href="${esc(s.url)}" style="font-size:11px;color:#888;text-decoration:underline;">Read more →</a></div>` : ""}
+          ? `<a href="${esc(s.url)}" style="font-size:14px;font-weight:700;color:#1a1a1a;text-decoration:none;line-height:1.4;">${esc(s.headline)}</a>`
+          : `<span style="font-size:14px;font-weight:700;color:#1a1a1a;line-height:1.4;">${esc(s.headline)}</span>`}
+        <span style="font-size:10px;color:#aaa;letter-spacing:1px;text-transform:uppercase;"> — ${esc(s.source)}</span>
+        <div style="font-size:13px;color:#555;line-height:1.55;margin-top:3px;">${esc(s.detail)}</div>
       </div>`).join("");
 
-    const watchBox = data.watch ? `
-      <div style="background:#f9f6f0;border-left:3px solid ${colour};padding:10px 14px;margin-top:4px;margin-bottom:4px;font-size:12px;color:#555;line-height:1.5;">
-        <strong style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#aaa;display:block;margin-bottom:4px;">What to watch</strong>
-        ${esc(data.watch)}
-      </div>` : "";
-
     return `
-      <div style="padding:28px 40px;border-bottom:2px solid #e8e3d8;">
-        <div style="display:flex;align-items:center;margin-bottom:12px;">
-          <span style="font-size:18px;margin-right:10px;">${topic.emoji}</span>
+      <div style="padding:24px 40px;border-bottom:2px solid #e8e3d8;">
+        <div style="display:flex;align-items:center;margin-bottom:14px;">
+          <span style="font-size:16px;margin-right:10px;">${topic.emoji}</span>
           <span style="font-size:9px;letter-spacing:3px;text-transform:uppercase;color:${colour};font-weight:700;">${esc(topic.label)}</span>
         </div>
-        ${data.summary ? `<div style="font-size:14px;line-height:1.75;color:#333;border-left:3px solid ${colour};padding-left:14px;margin-bottom:20px;">${esc(data.summary)}</div>` : ""}
-        ${stories}
-        ${watchBox}
+        ${stories || `<div style="font-size:12px;color:#aaa;font-style:italic;">No fresh stories in the last 48 hours.</div>`}
+        ${data.watch ? `<div style="background:#f9f6f0;border-left:3px solid ${colour};padding:9px 13px;margin-top:12px;font-size:12px;color:#555;line-height:1.5;"><strong style="font-size:8px;letter-spacing:2px;text-transform:uppercase;color:#aaa;display:block;margin-bottom:3px;">What to watch</strong>${esc(data.watch)}</div>` : ""}
       </div>`;
   }).join("");
 
@@ -241,11 +217,10 @@ function buildText(results) {
   let out = `GULF BUSINESS BRIEFING — ${date}\n${"=".repeat(52)}\n\n`;
   for (const { topic, data } of results) {
     out += `${topic.emoji}  ${topic.label.toUpperCase()}\n${"-".repeat(topic.label.length + 4)}\n`;
-    if (data.summary) out += `${data.summary}\n\n`;
-    for (const s of data.stories || []) {
-      out += `• ${s.headline} (${s.source}${s.published_date ? ", " + s.published_date : ""})\n`;
-      out += `  ${s.detail}\n`;
-      if (s.significance) out += `  → ${s.significance}\n`;
+    const stories = data.stories || [];
+    if (!stories.length) out += `No fresh stories in the last 48 hours.\n`;
+    for (const s of stories) {
+      out += `• ${s.headline} — ${s.source}\n  ${s.detail}\n`;
       if (s.url) out += `  ${s.url}\n`;
       out += "\n";
     }
@@ -294,7 +269,7 @@ async function main() {
       results.push({ topic, data });
     } catch (err) {
       console.error(`  ✗ Failed: "${topic.label}":`, err.message);
-      results.push({ topic, data: { summary: "Could not retrieve stories for this topic.", watch: "", stories: [] } });
+      results.push({ topic, data: { stories: [] } });
     }
   }
 
