@@ -1,178 +1,90 @@
-# Immigration & DHS Daily Briefing
+# Gulf Business Briefing
 
-A Node.js script that searches for the latest news on **ICE operations**, **third-country deportations**, and **DHS policy changes** using Claude's web search, then emails a formatted briefing to your inbox each morning.
+An automated morning newsletter that searches top-tier news sources for the latest Gulf business, energy, and geopolitical news, then emails a formatted briefing to your inbox each weekday before regional markets open.
 
-Runs automatically via **GitHub Actions** (free), or locally via **cron**.
+Built with the Anthropic API (Claude + web search) and Gmail. Runs automatically and free via GitHub Actions.
 
 ---
 
-## What you need
+## What it covers
 
-| Requirement | Where to get it |
+Six sections, each refreshed daily:
+
+| Section | Focus |
 |---|---|
-| Node.js 18+ | https://nodejs.org |
-| Anthropic API key | https://console.anthropic.com |
-| Gmail account | For sending the email |
-| Gmail App Password | https://myaccount.google.com/apppasswords |
+| 🇸🇦 Saudi Arabia & Vision 2030 | Economy, giga-projects, policy, investment |
+| 🇦🇪 UAE — Abu Dhabi & Dubai | Business, deals, regulation, announcements |
+| 🛢️ Oil & Energy Markets | OPEC, crude prices, Aramco, ADNOC, production |
+| 🏦 Sovereign Wealth Funds | PIF, Mubadala, ADIA, QIA deal flow |
+| 🌐 Gulf Geopolitics & Diplomacy | Regional relations, US/China/Iran dynamics |
+| 📈 Gulf Financial Markets & M&A | IPOs, M&A, Tadawul, DFM, ADX |
+
+Each section includes a short situation summary, 2–4 verified stories with source links and publication dates, and a forward-looking **"What to watch"** note.
+
+---
+
+## How it works
+
+1. A scheduled GitHub Action runs the script each weekday morning.
+2. For each section, Claude performs a live web search constrained to the **last 48 hours** and an **approved source list**.
+3. Results are validated, formatted into an HTML email, and sent via Gmail.
+
+### Source quality
+
+Stories are drawn only from an approved outlet list combining tier-1 global and Gulf-specialist sources, including: Reuters, Bloomberg, Financial Times, Wall Street Journal, AP, BBC, The Economist, The National, Arab News, Gulf News, MEED, Arabian Business, Zawya, Al Monitor, and Asharq Al-Awsat.
+
+### Timeliness
+
+Today's date is passed into every search and the model is instructed to use only stories from the last 48 hours — or to say so honestly when recent material is unavailable. Each story carries its publication date so freshness is visible at a glance.
 
 ---
 
 ## Setup
 
-### 1. Clone or create the repo
+### Requirements
 
-```bash
-git clone https://github.com/YOUR_USERNAME/immigration-briefing.git
-cd immigration-briefing
-```
+| Requirement | Where to get it |
+|---|---|
+| Anthropic API key | https://console.anthropic.com |
+| Gmail account | For sending the email |
+| Gmail App Password | https://myaccount.google.com/apppasswords |
 
-Or start from scratch:
+### Secrets
 
-```bash
-mkdir immigration-briefing && cd immigration-briefing
-git init
-```
-
-Then copy the project files in.
-
-### 2. Install dependencies
-
-```bash
-npm install
-```
-
-### 3. Create a Gmail App Password
-
-Gmail won't let scripts use your normal password. You need an **App Password**:
-
-1. Go to your Google Account → **Security**
-2. Enable **2-Step Verification** if not already on
-3. Go to https://myaccount.google.com/apppasswords
-4. Choose **Mail** / **Other (custom name)** → call it "DHS Briefing"
-5. Copy the 16-character password shown
-
-### 4. Set up your environment variables
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and fill in:
-
-```
-ANTHROPIC_API_KEY=sk-ant-...
-GMAIL_USER=yoursendingaccount@gmail.com
-GMAIL_APP_PASS=xxxx-xxxx-xxxx-xxxx
-RECIPIENT_EMAIL=yourinbox@example.com
-```
-
-### 5. Run it once to test
-
-```bash
-node briefing.js
-```
-
-You should see it fetch three topics and then confirm the email was sent.
-
----
-
-## Schedule it automatically with GitHub Actions (free)
-
-This is the recommended approach — GitHub's servers run it for you every morning, no machine needs to be left on.
-
-### 1. Push to a GitHub repo
-
-```bash
-git add .
-git commit -m "Initial briefing setup"
-git remote add origin https://github.com/YOUR_USERNAME/immigration-briefing.git
-git push -u origin main
-```
-
-> The repo can be **private** — GitHub Actions works on both public and private repos.
-
-### 2. Add your secrets to GitHub
-
-Go to your repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**
-
-Add each of these:
+Add these under repo **Settings → Secrets and variables → Actions**:
 
 | Secret name | Value |
 |---|---|
 | `ANTHROPIC_API_KEY` | Your Anthropic key |
-| `GMAIL_USER` | Your sending Gmail address |
-| `GMAIL_APP_PASS` | The App Password from step 3 |
+| `GMAIL_USER` | Sending Gmail address |
+| `GMAIL_APP_PASS` | 16-character Gmail App Password |
 | `RECIPIENT_EMAIL` | Where to deliver the briefing |
 
-### 3. Enable Actions
+### Schedule
 
-Go to the **Actions** tab in your repo. If prompted, click **"I understand my workflows, go ahead and enable them"**.
-
-### 4. Test a manual run
-
-In the **Actions** tab, click **Daily Immigration & DHS Briefing** → **Run workflow** → **Run workflow**.
-
-Watch it complete and check your inbox.
-
-### Adjust the schedule
-
-Edit `.github/workflows/daily-briefing.yml`:
+Delivery time is controlled by the cron expression in `.github/workflows/daily-briefing.yml`:
 
 ```yaml
-- cron: "0 7 * * 1-5"   # 07:00 UTC, weekdays only
+- cron: "0 5 * * 1-5"   # 05:00 UTC weekdays = 06:00 UK, before Gulf markets open
 ```
 
-Cron format: `minute hour day month day-of-week`
+GitHub Actions runs on UTC. Gulf markets (Tadawul, DFM, ADX) open around 10:00 GST (06:00 UTC), so a 05:00 UTC run delivers the briefing ahead of the open.
 
-Examples:
-- `0 6 * * *` — every day at 06:00 UTC (07:00 UK winter, 08:00 UK summer)
-- `0 7 * * 1-5` — weekdays at 07:00 UTC
-- `30 5 * * *` — every day at 05:30 UTC
+### Run manually
 
-> Note: GitHub Actions runs on UTC. London is UTC+0 (winter) or UTC+1 (BST, summer).
-> For a 7am London delivery year-round, use two cron entries or accept 1hr offset in summer.
+Trigger a test any time from the **Actions** tab → **Daily Gulf Briefing** → **Run workflow**.
 
 ---
 
-## Run locally on a schedule (alternative)
+## Customising
 
-If you prefer to run it on your own machine instead of GitHub:
-
-**macOS/Linux — crontab:**
-
-```bash
-crontab -e
-```
-
-Add:
-
-```
-0 7 * * 1-5 cd /full/path/to/immigration-briefing && node briefing.js >> /tmp/briefing.log 2>&1
-```
-
-**Windows — Task Scheduler:**
-
-Create a Basic Task that runs `node.exe` with argument `C:\path\to\immigration-briefing\briefing.js` on your chosen schedule.
+- **Topics:** edit the `TOPICS` array in `briefing.js`
+- **Sources:** edit the `APPROVED_SOURCES` array in `briefing.js`
+- **Delivery time:** edit the cron in `.github/workflows/daily-briefing.yml`
+- **Recipients:** change the `RECIPIENT_EMAIL` secret (comma-separate for multiple)
 
 ---
 
-## Customising the topics
+## Cost
 
-Edit `TOPICS` in `briefing.js` to search for anything else:
-
-```js
-const TOPICS = [
-  {
-    id: "ice",
-    label: "ICE Operations",
-    query: "US Immigration ICE operations arrests deportations raids 2026",
-  },
-  // add or change topics here
-];
-```
-
----
-
-## Cost estimate
-
-Each daily run makes ~3 API calls with web search. At typical Sonnet pricing this is roughly **$0.03–0.08 per day** depending on result length — around **$1–2/month**.
+Roughly six web-search API calls per run, about £0.05–0.15 per day depending on result length — approximately £2–4/month. GitHub Actions is free for this usage level.
