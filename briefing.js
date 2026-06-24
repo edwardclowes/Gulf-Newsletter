@@ -98,7 +98,7 @@ async function fetchTopic(topic) {
   const today = todayString();
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-4-20250514",
     max_tokens: 2000,
     system: `You are a senior Gulf business journalist writing a morning briefing. Today's date is ${today}.
 
@@ -109,7 +109,7 @@ STRICT RULES:
 - Only cite stories from these approved sources: ${APPROVED_SOURCES.join(", ")}. Do not use blogs, press releases, or unknown outlets.
 - Do not include any <cite> tags or citation markup in your response.
 
-Return ONLY a valid JSON object with NO markdown fencing, NO preamble:
+CRITICAL: Your entire response must be ONLY the raw JSON object. Do NOT write any preamble, explanation, or thinking-out-loud. Do NOT use code fences. Start your response with { and end with }. Nothing else. Use this exact structure:
 {
   "summary": "2-3 sentence factual overview of the current situation as of ${today}",
   "watch": "One forward-looking sentence: what to monitor in the next 24-48 hours",
@@ -135,7 +135,9 @@ Include 2-4 of the most significant recent stories. Be factual and neutral.`,
     .join("");
 
   try {
-    const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+    // Pull out just the JSON object, ignoring any preamble or code fences
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text.replace(/```json|```/g, "").trim());
     parsed.summary = stripCitations(parsed.summary || "");
     parsed.watch   = stripCitations(parsed.watch || "");
     parsed.stories = (parsed.stories || []).map((s) => ({
