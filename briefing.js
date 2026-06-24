@@ -41,7 +41,7 @@ const TOPICS = [
     id: "saudi",
     label: "Saudi Arabia & Vision 2030",
     emoji: "🇸🇦",
-    query: "Saudi Arabia Vision 2030 economy business investment policy",
+    query: "Saudi Arabia economy business investment PIF Aramco Riyadh",
   },
   {
     id: "uae",
