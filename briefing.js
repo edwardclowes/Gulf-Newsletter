@@ -98,7 +98,7 @@ async function fetchTopic(topic) {
   const today = todayString();
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     max_tokens: 2000,
     system: `You are a senior Gulf business journalist writing a morning briefing. Today's date is ${today}.
 
